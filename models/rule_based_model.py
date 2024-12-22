@@ -1,123 +1,58 @@
 # models/rule_based_model.py
-import re
-from indicnlp.tokenize.indic_tokenize import trivial_tokenize
-from collections import defaultdict
+
+from tamil_data import TAMIL_LANGUAGE_DATA
 
 class RuleBasedChecker:
     def __init__(self):
-        self.tamil_words = self._load_tamil_dictionary()
+        self.data = TAMIL_LANGUAGE_DATA
         
-        # Expanded grammar rules with more patterns
-        self.grammar_rules = {
-            'subject_verb_agreement': [
-                (r'நான்.*கிறார்கள்', 'First person singular with plural verb'),
-                (r'நான்.*கிறார்', 'First person singular with formal verb'),
-                (r'நான்.*கிறது', 'First person with neuter verb'),
-                (r'நாங்கள்.*கிறான்', 'First person plural with singular verb'),
-                (r'நாங்கள்.*கிறாள்', 'First person plural with feminine singular'),
-                (r'நீ.*கிறார்கள்', 'Second person singular with plural verb'),
-                (r'நீங்கள்.*கிறான்', 'Second person plural with singular verb'),
-                (r'ஆசிரியர்.*கிறான்', 'Honorific subject with informal verb')
-            ],
-            'spelling_patterns': [
-                (r'சல்', 'Possible misspelling of செல்'),
-                (r'பதில்', 'Possible misspelling of பதிவு'),
-                (r'எங்க', 'Possible misspelling of எங்கே')
-            ],
-            'word_spacing': [
-                (r'\w+க்கு\w+', 'Missing space before க்கு'),
-                (r'\w+யில்\w+', 'Missing space before யில்'),
-                (r'\w+உடன்\w+', 'Missing space before உடன்')
-            ]
-        }
-
-    def _load_tamil_dictionary(self):
-        basic_dictionary = {
-            'நான்': 'pronoun',
-            'நீ': 'pronoun',
-            'நாங்கள்': 'pronoun',
-            'பள்ளி': 'noun',
-            'பள்ளிக்கு': 'noun',
-            'செல்கிறேன்': 'verb',
-            'செல்கிறான்': 'verb',
-            'செல்கிறாள்': 'verb',
-            'செல்கிறது': 'verb',
-            'படிக்கிறோம்': 'verb',
-            'பாடல்': 'noun',
-            'பாடுகிறேன்': 'verb',
-            'ஆசிரியர்': 'noun',
-            'நல்ல': 'adjective',
-            'பாடங்களை': 'noun',
-            'கற்றுக்': 'verb',
-            'கொடுக்கிறார்': 'verb'
-        }
-        
-        try:
-            with open("data/tamil_dictionary.txt", "r", encoding="utf-8") as file:
-                for line in file:
-                    if line.strip():
-                        parts = line.strip().split(',')
-                        if len(parts) >= 2:
-                            basic_dictionary[parts[0]] = parts[1]
-        except FileNotFoundError:
-            pass  # Use the basic dictionary if file not found
-            
-        return basic_dictionary
-
-    def split_sentences(self, text):
-        # Simple sentence splitting based on punctuation
-        sentences = re.split('[.!?।]', text)
-        return [s.strip() for s in sentences if s.strip()]
-
-    def check_spelling(self, text):
-        errors = []
-        words = trivial_tokenize(text)
-        
-        for word in words:
-            # Check spelling patterns
-            for pattern, msg in self.grammar_rules['spelling_patterns']:
-                if re.match(pattern, word):
-                    errors.append(('spelling', msg, word))
-            
-            # Check against dictionary
-            if word not in self.tamil_words and not any(char.isdigit() for char in word):
-                errors.append(('spelling', f'Unknown word: {word}', word))
-            
-            # Check word spacing
-            for pattern, msg in self.grammar_rules['word_spacing']:
-                if re.match(pattern, word):
-                    errors.append(('spelling', msg, word))
-        
-        return errors
-
-    def check_grammar(self, text):
-        errors = []
-        sentences = self.split_sentences(text)
-        
-        for sentence in sentences:
-            # Check subject-verb agreement
-            for pattern, error_msg in self.grammar_rules['subject_verb_agreement']:
-                if re.search(pattern, sentence):
-                    errors.append(('grammar', error_msg, sentence))
-        
-        return errors
-
     def check_text(self, text):
-        try:
-            # Run spelling checks
-            spelling_errors = self.check_spelling(text)
+        errors = []
+        words = text.split()
+        
+        for i, word in enumerate(words):
+            # Check spelling
+            if not self._is_valid_word(word):
+                correction = self._get_correction(word)
+                if correction:
+                    errors.append(('spelling', f'Incorrect spelling: {word}', 
+                                 f'Suggestion: {correction}'))
             
-            # Run grammar checks
-            grammar_errors = self.check_grammar(text)
-            
-            # Combine all errors
-            all_errors = spelling_errors + grammar_errors
-            
-            # If no errors found, return empty list
-            if not all_errors:
-                return []
-                
-            return all_errors
-            
-        except Exception as e:
-            return [('error', f'Error in text analysis: {str(e)}', text)]
+            # Check grammar
+            if i > 0:
+                grammar_error = self._check_grammar_rules(words[i-1], word)
+                if grammar_error:
+                    errors.append(('grammar', grammar_error[0], grammar_error[1]))
+        
+        return errors
+    
+    def _is_valid_word(self, word):
+        all_words = (self.data['pronouns'] + self.data['verbs'] + 
+                    self.data['nouns'] + self.data['adjectives'] + 
+                    self.data['common_words'])
+        return word in all_words or word in self.data['colloquial_forms'].keys()
+    
+    def _get_correction(self, word):
+        if word in self.data['colloquial_forms']:
+            return self.data['colloquial_forms'][word]
+        return None
+    
+    def _check_grammar_rules(self, prev_word, curr_word):
+        # Subject-verb agreement check
+        if prev_word in self.data['pronouns']:
+            if curr_word in self.data['verbs']:
+                if not self._check_subject_verb_agreement(prev_word, curr_word):
+                    return ('Subject-verb agreement error', 
+                           f'{prev_word} {curr_word}')
+        return None
+    
+    def _check_subject_verb_agreement(self, subject, verb):
+        # Simplified rule checking
+        singular_pronouns = ['நான்', 'நீ', 'அவன்', 'அவள்', 'அது']
+        plural_pronouns = ['நாங்கள்', 'நீங்கள்', 'அவர்கள்']
+        
+        if subject in singular_pronouns and verb.endswith('கிறார்கள்'):
+            return False
+        if subject in plural_pronouns and not verb.endswith('கிறார்கள்'):
+            return False
+        return True
