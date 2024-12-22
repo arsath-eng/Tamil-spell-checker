@@ -2,7 +2,8 @@
 
 A comprehensive tool for checking Tamil text spelling, grammar, and overall correctness using multiple AI models.
 
-![Tamil Text Checker Main Interface](https://placeholder.com/main-interface.png)
+<img src="screenshots/5-correct word/1.png" width="600" alt="Homepage Screenshot">
+
 
 ## Features
 
@@ -19,13 +20,13 @@ A comprehensive tool for checking Tamil text spelling, grammar, and overall corr
 ## Screenshots
 
 ### Main Interface
-<img src="/api/placeholder/800/400" alt="Main Interface" />
+ <img src="screenshots/1-Spelling Errors (Intentional misspellings)/1.png" width="600" alt="Homepage Screenshot">
 
 ### Example Selection
-<img src="/api/placeholder/800/300" alt="Example Selection" />
+<img src="screenshots/1-Spelling Errors (Intentional misspellings)/2.png" width="600" alt="Homepage Screenshot">
 
 ### Analysis Results
-<img src="/api/placeholder/800/500" alt="Analysis Results" />
+<img src="screenshots/1-Spelling Errors (Intentional misspellings)/3.png" width="600" alt="Homepage Screenshot">
 
 ## Installation
 
@@ -146,7 +147,4 @@ Main dependencies include:
 - Groq for the Gemma model API
 - Tamil language experts who helped validate the rule sets
 
-## Contact
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter)
-Project Link: [https://github.com/yourusername/tamil-text-checker](https://github.com/yourusername/tamil-text-checker)
