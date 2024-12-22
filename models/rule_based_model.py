@@ -1,80 +1,123 @@
+# models/rule_based_model.py
 import re
-from indicnlp.tokenize import sentence_tokenize
 from indicnlp.tokenize.indic_tokenize import trivial_tokenize
+from collections import defaultdict
 
 class RuleBasedChecker:
     def __init__(self):
-        # Extended Tamil dictionary
-        self.tamil_words = set([
-            'வணக்கம்', 'நன்றி', 'இந்திய', 'தமிழ்', 'பயிற்சி',
-            'நான்', 'நீ', 'அவன்', 'அவள்', 'அது', 'நாங்கள்', 'நீங்கள்', 'அவர்கள்',
-            'பள்ளி', 'செல்', 'படி', 'எழுது', 'பேசு', 'கேள்', 'பார்'
-        ])
+        self.tamil_words = self._load_tamil_dictionary()
         
-        # Extended grammar rules
+        # Expanded grammar rules with more patterns
         self.grammar_rules = {
-            'subject_verb': [
+            'subject_verb_agreement': [
                 (r'நான்.*கிறார்கள்', 'First person singular with plural verb'),
+                (r'நான்.*கிறார்', 'First person singular with formal verb'),
+                (r'நான்.*கிறது', 'First person with neuter verb'),
                 (r'நாங்கள்.*கிறான்', 'First person plural with singular verb'),
-                (r'அவன்.*கிறார்கள்', 'Third person singular with plural verb'),
-                (r'அவர்கள்.*கிறான்', 'Third person plural with singular verb')
+                (r'நாங்கள்.*கிறாள்', 'First person plural with feminine singular'),
+                (r'நீ.*கிறார்கள்', 'Second person singular with plural verb'),
+                (r'நீங்கள்.*கிறான்', 'Second person plural with singular verb'),
+                (r'ஆசிரியர்.*கிறான்', 'Honorific subject with informal verb')
             ],
-            'tense': [
-                (r'\w+கிறேன்\s+\w+ந்தேன்', 'Mixed present and past tense'),
-                (r'\w+வேன்\s+\w+கிறேன்', 'Mixed future and present tense'),
-                (r'\w+ந்தேன்\s+\w+வேன்', 'Mixed past and future tense')
+            'spelling_patterns': [
+                (r'சல்', 'Possible misspelling of செல்'),
+                (r'பதில்', 'Possible misspelling of பதிவு'),
+                (r'எங்க', 'Possible misspelling of எங்கே')
+            ],
+            'word_spacing': [
+                (r'\w+க்கு\w+', 'Missing space before க்கு'),
+                (r'\w+யில்\w+', 'Missing space before யில்'),
+                (r'\w+உடன்\w+', 'Missing space before உடன்')
             ]
         }
-    
+
+    def _load_tamil_dictionary(self):
+        basic_dictionary = {
+            'நான்': 'pronoun',
+            'நீ': 'pronoun',
+            'நாங்கள்': 'pronoun',
+            'பள்ளி': 'noun',
+            'பள்ளிக்கு': 'noun',
+            'செல்கிறேன்': 'verb',
+            'செல்கிறான்': 'verb',
+            'செல்கிறாள்': 'verb',
+            'செல்கிறது': 'verb',
+            'படிக்கிறோம்': 'verb',
+            'பாடல்': 'noun',
+            'பாடுகிறேன்': 'verb',
+            'ஆசிரியர்': 'noun',
+            'நல்ல': 'adjective',
+            'பாடங்களை': 'noun',
+            'கற்றுக்': 'verb',
+            'கொடுக்கிறார்': 'verb'
+        }
+        
+        try:
+            with open("data/tamil_dictionary.txt", "r", encoding="utf-8") as file:
+                for line in file:
+                    if line.strip():
+                        parts = line.strip().split(',')
+                        if len(parts) >= 2:
+                            basic_dictionary[parts[0]] = parts[1]
+        except FileNotFoundError:
+            pass  # Use the basic dictionary if file not found
+            
+        return basic_dictionary
+
+    def split_sentences(self, text):
+        # Simple sentence splitting based on punctuation
+        sentences = re.split('[.!?।]', text)
+        return [s.strip() for s in sentences if s.strip()]
+
     def check_spelling(self, text):
         errors = []
         words = trivial_tokenize(text)
         
         for word in words:
-            if word not in self.tamil_words:
+            # Check spelling patterns
+            for pattern, msg in self.grammar_rules['spelling_patterns']:
+                if re.match(pattern, word):
+                    errors.append(('spelling', msg, word))
+            
+            # Check against dictionary
+            if word not in self.tamil_words and not any(char.isdigit() for char in word):
                 errors.append(('spelling', f'Unknown word: {word}', word))
+            
+            # Check word spacing
+            for pattern, msg in self.grammar_rules['word_spacing']:
+                if re.match(pattern, word):
+                    errors.append(('spelling', msg, word))
         
         return errors
-    
+
     def check_grammar(self, text):
         errors = []
-        sentences = sentence_tokenize(text, lang='ta')
+        sentences = self.split_sentences(text)
         
         for sentence in sentences:
-            for rule_type, rules in self.grammar_rules.items():
-                for pattern, error_msg in rules:
-                    if re.search(pattern, sentence):
-                        errors.append(('grammar', error_msg, sentence))
+            # Check subject-verb agreement
+            for pattern, error_msg in self.grammar_rules['subject_verb_agreement']:
+                if re.search(pattern, sentence):
+                    errors.append(('grammar', error_msg, sentence))
         
         return errors
-    
-    def check_text(self, text):
-        return self.check_spelling(text) + self.check_grammar(text)
 
-# models/deep_learning_model.py
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-class DeepLearningChecker:
-    def __init__(self):
-        self.tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-bert")
-        self.model = AutoModelForSequenceClassification.from_pretrained("ai4bharat/indic-bert")
-        
     def check_text(self, text):
         try:
-            inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True)
-            with torch.no_grad():
-                outputs = self.model(**inputs)
+            # Run spelling checks
+            spelling_errors = self.check_spelling(text)
             
-            # Get error probability
-            probabilities = torch.softmax(outputs.logits, dim=1)
-            error_prob = probabilities[0][1].item()
+            # Run grammar checks
+            grammar_errors = self.check_grammar(text)
             
-            errors = []
-            if error_prob > 0.5:
-                errors.append(('grammar', f'Error probability: {error_prob:.2%}', text))
+            # Combine all errors
+            all_errors = spelling_errors + grammar_errors
             
-            return errors
+            # If no errors found, return empty list
+            if not all_errors:
+                return []
+                
+            return all_errors
             
         except Exception as e:
-            return [('error', str(e), text)]
+            return [('error', f'Error in text analysis: {str(e)}', text)]
